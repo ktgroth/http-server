@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -11,37 +12,16 @@
 #include "include/server.h"
 #include "include/http.h"
 
-uint32_t parse_address(char *address)
-{
-    uint8_t ap[4];
-    if (sscanf(address, "%hhd.%hhd.%hhd.%hhd", &ap[0], &ap[1], &ap[2], &ap[3]) == EOF)
-    {
-        perror("sscanf(address, \"%c.%c.%c.%c\", ap)");
-        return 0;
-    }
-
-    uint32_t addr =
-        ((uint32_t)ap[0] << 24) + 
-        ((uint32_t)ap[1] << 16) + 
-        ((uint32_t)ap[2] << 8) + 
-        ap[3];
-    return addr;
-}
-
 server_t *init_server(char *address, uint16_t port)
 {
-    uint32_t addr = parse_address(address);
-    if (!addr)
-        return NULL;
-
-    server_t *server = (server_t *)calloc(1, sizeof(server));
+    server_t *server = (server_t *)calloc(1, sizeof(server_t));
     if (!server)
     {
         perror("calloc(1, sizeof(server))");
         return NULL;
     }
 
-    server->addr = addr;
+    server->addr = address;
     server->port = port;
 
     return server;
@@ -142,22 +122,10 @@ void *handle_client(void *arg)
     char *buffer = read_from_client(client_fd);
     printf("%s\n", buffer);
 
-    http_response *response = parse_request(buffer);
-    dprintf(client_fd,
-            "%s %ld %s\r\n"
-            "Content-Length: %zu\r\n"
-            "Content-Type: text/html\r\n"
-            "\r\n"
-            "%s",
-            response->version,
-            response->status,
-            response->reason,
-            response->content_length,
-            response->body);
-
+    parse_request(client_fd, buffer);
     close(client_fd);
     cthread->is_done = 1;
-    printf("{ %d } Client response sent", client_fd);
+    printf("{ %d } Client response sent\n", client_fd);
 
     free(args);
     return NULL;
@@ -206,17 +174,21 @@ void *client_joiner(void *)
     return NULL;
 }
 
-void *client_listener(void *server)
+void *client_listener(void *arg)
 {
+    server_t *server = *(server_t **)arg;
+
     int server_fd;
     struct sockaddr_in address;
     socklen_t addrlen = sizeof(address);
 
     start_server(&server_fd);
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(3000);
+    address.sin_port = htons(server->port);
+    inet_aton(server->addr, &address.sin_addr);
     bind_server(&server_fd, &address);
+
+    printf("Awaiting Requests ...\n");
 
     int running = 1;
     while (running)

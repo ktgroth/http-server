@@ -20,10 +20,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    printf(
-        "Server Online\n"
-        "Awaiting Requests ...\n"
-    );
+    printf("Server Online\n");
 
     pthread_t listener;
     if (pthread_create(&listener, NULL, client_listener, &server))

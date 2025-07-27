@@ -6,7 +6,7 @@
 
 typedef struct
 {
-    uint32_t addr;
+    char *addr;
     uint16_t port;
 } server_t;
 
